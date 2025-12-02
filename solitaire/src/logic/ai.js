@@ -9,6 +9,7 @@
  * 4. suggestBestMove(): choose highest-score candidate.
  * 5. explainMove(): user readable feedback for UI hints.
  * 6. getSuggestion(): convenience wrapper returning { move, message }.
+ * 7. (Debug) Decision tree: shallow lookahead with per-reason weights logged.
  *
  * Stack Move Enumeration:
  * - For each column and start index we call canDragFromTableau to ensure the run
@@ -27,6 +28,112 @@ import {
   canDragFromTableau
 } from './rules.js';
 import { debugLog } from '../utils/debug.js';
+
+// Debug tree configuration (kept small to avoid spam)
+const DEBUG_TREE_DEPTH = 2; // current + one step lookahead
+const DEBUG_TREE_BREADTH = 3; // top N moves to expand per node
+const FUTURE_DISCOUNT = 0.5; // weight for lookahead score in rollup
+
+// Utilities: deep clone of state (cards are cloned to avoid mutation bleed)
+function clonePile(pile) {
+  return pile.map(c => ({ ...c }));
+}
+function cloneState(state) {
+  return {
+    tableaus: state.tableaus.map(col => clonePile(col)),
+    foundations: state.foundations.map(f => clonePile(f)),
+    stock: clonePile(state.stock),
+    waste: clonePile(state.waste)
+  };
+}
+
+// Apply a move to a cloned state (pure). Returns new state or null if illegal.
+function simulateApplyMove(state, move) {
+  const s = cloneState(state);
+  const { tableaus, foundations, stock, waste } = s;
+  switch (move.type) {
+    case 'tableau-to-foundation': {
+      const src = tableaus[move.fromColumn];
+      if (!src || move.fromIndex !== src.length - 1) return null;
+      const card = src[move.fromIndex];
+      if (!canPlaceOnFoundation(card, foundations[move.foundationIndex])) return null;
+      foundations[move.foundationIndex] = [...foundations[move.foundationIndex], { ...card }];
+      tableaus[move.fromColumn] = src.slice(0, move.fromIndex);
+      const col = tableaus[move.fromColumn];
+      if (col.length) {
+        const last = col[col.length - 1];
+        if (last && !last.faceUp) last.faceUp = true;
+      }
+      return s;
+    }
+    case 'waste-to-foundation': {
+      if (!waste.length) return null;
+      const top = waste[waste.length - 1];
+      if (!canPlaceOnFoundation(top, foundations[move.foundationIndex])) return null;
+      foundations[move.foundationIndex] = [...foundations[move.foundationIndex], { ...top }];
+      s.waste = waste.slice(0, -1);
+      return s;
+    }
+    case 'tableau-to-tableau': {
+      const src = tableaus[move.fromColumn];
+      const dest = tableaus[move.toColumn];
+      if (!src || !dest) return null;
+      const card = src[src.length - 1];
+      if (move.fromIndex !== src.length - 1) return null;
+      if (!canPlaceOnTableau(card, dest)) return null;
+      tableaus[move.fromColumn] = src.slice(0, -1);
+      tableaus[move.toColumn] = [...dest, { ...card, columnIndex: move.toColumn }];
+      const col = tableaus[move.fromColumn];
+      if (col.length) {
+        const last = col[col.length - 1];
+        if (last && !last.faceUp) last.faceUp = true;
+      }
+      return s;
+    }
+    case 'tableau-stack-to-tableau': {
+      const src = tableaus[move.fromColumn];
+      const dest = tableaus[move.toColumn];
+      if (!src || !dest) return null;
+      if (!canDragFromTableau(tableaus, move.fromColumn, move.fromIndex)) return null;
+      const stackTop = src[move.fromIndex];
+      if (!stackTop || !stackTop.faceUp) return null;
+      if (!canPlaceOnTableau(stackTop, dest)) return null;
+      const moving = src.slice(move.fromIndex).map(c => ({ ...c, columnIndex: move.toColumn }));
+      tableaus[move.toColumn] = [...dest, ...moving];
+      tableaus[move.fromColumn] = src.slice(0, move.fromIndex);
+      const col = tableaus[move.fromColumn];
+      if (col.length) {
+        const last = col[col.length - 1];
+        if (last && !last.faceUp) last.faceUp = true;
+      }
+      return s;
+    }
+    case 'waste-to-tableau': {
+      if (!waste.length) return null;
+      const top = waste[waste.length - 1];
+      const dest = tableaus[move.toColumn];
+      if (!canPlaceOnTableau(top, dest)) return null;
+      s.waste = waste.slice(0, -1);
+      tableaus[move.toColumn] = [...dest, { ...top, faceUp: true, columnIndex: move.toColumn }];
+      return s;
+    }
+    case 'draw-stock': {
+      if (!canDrawFromStock(stock)) return null;
+      const drawn = stock[stock.length - 1];
+      s.stock = stock.slice(0, -1);
+      s.waste = [...waste, { ...drawn, faceUp: true }];
+      return s;
+    }
+    case 'recycle-waste': {
+      if (!canRecycleWaste(stock, waste)) return null;
+      s.stock = waste.map(c => ({ ...c, faceUp: false }));
+      s.waste = [];
+      return s;
+    }
+    default:
+      return null;
+  }
+}
 
 // Move object shape:
 // { type: 'tableau-to-foundation'|'waste-to-foundation'|'tableau-to-tableau'|'waste-to-tableau'|'draw-stock'|'recycle-waste',
@@ -137,7 +244,7 @@ export function scoreMove(move, state) {
   let score = 0;
   let reasonParts = [];
 
-  const add = (pts, text) => { score += pts; reasonParts.push(text); };
+  const add = (pts, text) => { score += pts; reasonParts.push({ delta: pts, reason: text }); };
 
   switch (move.type) {
     case 'tableau-to-foundation': {
@@ -205,7 +312,7 @@ export function scoreMove(move, state) {
   const foundationCount = foundations.reduce((sum, f) => sum + f.length, 0);
   add(foundationCount * 0.2, 'Foundation progress weight');
 
-  return { score, reason: reasonParts.join('; ') };
+  return { score, reason: reasonParts.map(r => r.reason).join('; '), parts: reasonParts };
 }
 
 export function suggestBestMove(state) {
@@ -230,7 +337,7 @@ export function suggestBestMove(state) {
   // Score all moves
   const scoredMoves = moves.map((m) => {
     const s = scoreMove(m, state);
-    return { ...m, score: s.score, reason: s.reason };
+    return { ...m, score: s.score, reason: s.reason, parts: s.parts };
   });
   // Sort desc by score for logging visibility
   scoredMoves.sort((a, b) => b.score - a.score);
@@ -238,15 +345,56 @@ export function suggestBestMove(state) {
     type: m.type,
     score: Math.round(m.score * 100) / 100,
     reason: m.reason,
+    parts: m.parts,
     from: m.fromColumn !== undefined ? `${m.fromColumn}:${m.fromIndex ?? ''}` : undefined,
     to: m.toColumn !== undefined ? m.toColumn : undefined,
     f: m.foundationIndex !== undefined ? m.foundationIndex : undefined,
     len: m.length
   }));
   debugLog('🤖 AI: Scored moves (top)', { total: scoredMoves.length, top: topPreview });
+  // Build a shallow decision tree for debug visibility (does not change selection)
+  try {
+    const tree = buildDecisionTree(state, DEBUG_TREE_DEPTH, DEBUG_TREE_BREADTH);
+    debugLog('🤖 AI: Decision tree', tree);
+  } catch {}
   const best = scoredMoves[0];
   debugLog('🤖 AI: Selected best move', { type: best.type, score: best.score, reason: best.reason, details: topPreview[0] });
   return best;
+}
+
+// Build a small decision tree for debugging: children are best few moves from next state
+function summarizeMove(m) {
+  return {
+    type: m.type,
+    score: Math.round(m.score * 100) / 100,
+    reason: m.reason,
+    parts: m.parts,
+    from: m.fromColumn !== undefined ? `${m.fromColumn}:${m.fromIndex ?? ''}` : undefined,
+    to: m.toColumn !== undefined ? m.toColumn : undefined,
+    f: m.foundationIndex !== undefined ? m.foundationIndex : undefined,
+    len: m.length
+  };
+}
+
+function buildDecisionTree(state, depth, breadth) {
+  const moves = enumerateMoves(state).map(m => ({ ...m, ...scoreMove(m, state) }));
+  moves.sort((a, b) => b.score - a.score);
+  const top = moves.slice(0, breadth);
+  const nodes = top.map(m => {
+    const childState = simulateApplyMove(state, m);
+    let children = [];
+    let bestChildScore = 0;
+    if (depth > 1 && childState) {
+      const childTree = buildDecisionTree(childState, depth - 1, breadth);
+      children = childTree.nodes;
+      bestChildScore = childTree.bestRollup;
+    }
+    const rollup = m.score + FUTURE_DISCOUNT * (bestChildScore || 0);
+    return { move: summarizeMove(m), rollup: Math.round(rollup * 100) / 100, children };
+  });
+  // Best rollup at this level
+  const bestRollup = nodes.length ? Math.max(...nodes.map(n => n.rollup)) : 0;
+  return { depth, breadth, discount: FUTURE_DISCOUNT, nodes, bestRollup };
 }
 
 export function explainMove(move, state) {
