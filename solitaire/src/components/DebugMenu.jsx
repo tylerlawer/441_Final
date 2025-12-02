@@ -11,14 +11,12 @@
  * (button is in the bottom-left so it doesn't cover the cards)
  */
 import React, { useState, useEffect } from 'react';
-import { useGame } from '../hooks/useGame.js';
 import { setDebugLogger } from '../utils/debug.js';
 
 export default function DebugMenu({ onOpenChange }) {
     const [isOpen, setIsOpen] = useState(false);
     const [logs, setLogs] = useState([]);
     const [showTestWinModal, setShowTestWinModal] = useState(false);
-    const gameContext = useGame();
 
     const log = (message, data = null) => {
         const timestamp = new Date().toLocaleTimeString();
