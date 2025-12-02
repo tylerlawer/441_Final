@@ -1,7 +1,7 @@
 // Debug menu for testing all game functions and viewing AI process
 import React, { useState, useEffect } from 'react';
 import { useGame } from '../hooks/useGame.js';
-import { setDebugLogger } from '../hooks/useGame.js';
+import { setDebugLogger } from '../utils/debug.js';
 
 export default function DebugMenu({ onOpenChange }) {
     const [isOpen, setIsOpen] = useState(false);

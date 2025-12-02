@@ -26,6 +26,7 @@ import {
   isGameWon,
   canDragFromTableau
 } from './rules.js';
+import { debugLog } from '../utils/debug.js';
 
 // Move object shape:
 // { type: 'tableau-to-foundation'|'waste-to-foundation'|'tableau-to-tableau'|'waste-to-tableau'|'draw-stock'|'recycle-waste',
@@ -212,15 +213,39 @@ export function suggestBestMove(state) {
     return { type: 'game-won', reason: 'All foundation piles complete', score: Infinity };
   }
   const moves = enumerateMoves(state);
+  // Log enumeration summary
+  try {
+    const brief = moves.slice(0, 25).map((m) => ({
+      type: m.type,
+      from: m.fromColumn !== undefined ? `${m.fromColumn}:${m.fromIndex ?? ''}` : undefined,
+      to: m.toColumn !== undefined ? m.toColumn : undefined,
+      f: m.foundationIndex !== undefined ? m.foundationIndex : undefined,
+      len: m.length
+    }));
+    debugLog('🤖 AI: Enumerated moves', { count: moves.length, examples: brief });
+  } catch {}
   if (moves.length === 0) {
     return { type: 'no-move', reason: 'No legal moves available', score: 0 };
   }
-  let best = null;
-  for (const m of moves) {
-    const scored = scoreMove(m, state);
-    const moveObj = { ...m, score: scored.score, reason: scored.reason };
-    if (!best || moveObj.score > best.score) best = moveObj;
-  }
+  // Score all moves
+  const scoredMoves = moves.map((m) => {
+    const s = scoreMove(m, state);
+    return { ...m, score: s.score, reason: s.reason };
+  });
+  // Sort desc by score for logging visibility
+  scoredMoves.sort((a, b) => b.score - a.score);
+  const topPreview = scoredMoves.slice(0, 5).map((m) => ({
+    type: m.type,
+    score: Math.round(m.score * 100) / 100,
+    reason: m.reason,
+    from: m.fromColumn !== undefined ? `${m.fromColumn}:${m.fromIndex ?? ''}` : undefined,
+    to: m.toColumn !== undefined ? m.toColumn : undefined,
+    f: m.foundationIndex !== undefined ? m.foundationIndex : undefined,
+    len: m.length
+  }));
+  debugLog('🤖 AI: Scored moves (top)', { total: scoredMoves.length, top: topPreview });
+  const best = scoredMoves[0];
+  debugLog('🤖 AI: Selected best move', { type: best.type, score: best.score, reason: best.reason, details: topPreview[0] });
   return best;
 }
 
@@ -272,5 +297,9 @@ export function explainMove(move, state) {
 
 export default function getSuggestion(state) {
   const move = suggestBestMove(state);
+  try {
+    const message = explainMove(move, state);
+    debugLog('🤖 AI: Explanation', { message });
+  } catch {}
   return { move, message: explainMove(move, state) };
 }

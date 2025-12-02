@@ -10,33 +10,11 @@ import {
     isGameWon 
 } from '../logic/rules.js';
 import getSuggestion from '../logic/ai.js';
+import { debugLog } from '../utils/debug.js';
 
 const GameContext = createContext(null); // single context for all game bits
 
-// Global debug logger that components can subscribe to
-let debugLogCallback = null;
-// Simple dedupe to avoid React StrictMode double-invocation duplicates in dev
-let __lastLogSig = null;
-let __lastLogTime = 0;
-const __makeLogSig = (message, data) => {
-    try {
-        return `${message}|${data ? JSON.stringify(data) : ''}`;
-    } catch {
-        return message;
-    }
-};
-export const setDebugLogger = (callback) => { debugLogCallback = callback; };
-const debugLog = (message, data) => {
-    const now = Date.now();
-    const sig = __makeLogSig(message, data);
-    // If identical log fires within 200ms, skip as a duplicate (common in StrictMode dev)
-    if (__lastLogSig === sig && now - __lastLogTime < 200) {
-        return;
-    }
-    __lastLogSig = sig;
-    __lastLogTime = now;
-    if (debugLogCallback) debugLogCallback(message, data);
-};
+// debugLog is now centralized in utils/debug.js
 
 export function GameProvider({ children }) {
     const [gameState, setGameState] = useState(() => initGame());
