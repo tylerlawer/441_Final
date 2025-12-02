@@ -5,6 +5,8 @@
 
 A Solitaire game that can actually teach you how to play better! Built with React and includes an AI that explains its thinking.
 
+**🎮 [Play it live here!](https://robertb.me/Klondike-Solitaire-with-AI/)**
+
 ## What's Cool About This
 
 - **The Classic Game** - Standard Klondike Solitaire that you know and love
