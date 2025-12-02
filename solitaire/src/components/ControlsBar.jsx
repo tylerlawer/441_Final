@@ -1,10 +1,17 @@
 // Controls: suggest move, apply suggested move, clear highlight, new game. Hint stored locally.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame } from '../hooks/useGame.js';
 
 export default function ControlsBar() {
     const { applySuggestedMove, resetGame, suggestMove, clearSuggestion, currentSuggestion } = useGame();
     const [hint, setHint] = useState(null); // message from AI explainMove
+
+    // Auto-clear hint text when suggestion is cleared
+    useEffect(() => {
+        if (!currentSuggestion) {
+            setHint(null);
+        }
+    }, [currentSuggestion]);
 
     function handleSuggest() {
         // Ask AI for best move, store message so user sees explanation
@@ -14,12 +21,12 @@ export default function ControlsBar() {
 
     function handleClearHint() {
         clearSuggestion();
-        setHint(null);
+        // hint will be cleared by useEffect automatically
     }
 
     function handleApplySuggested() {
-        const applied = applySuggestedMove();
-        if (applied) setHint(null); // clear hint so highlight + message both go away
+        applySuggestedMove();
+        // hint will be cleared by useEffect automatically
     }
 
     return (

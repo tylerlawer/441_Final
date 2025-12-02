@@ -7,7 +7,7 @@ import Foundations from './Foundations.jsx';
 import ControlsBar from './ControlsBar.jsx';
 
 export default function GameBoard() {
-    const { tableaus, checkWin, foundations } = useGame();
+    const { tableaus, checkWin, foundations, resetGame } = useGame();
     const [showWinModal, setShowWinModal] = useState(false);
 
     useEffect(() => {
@@ -38,12 +38,23 @@ export default function GameBoard() {
                         <p className="text-lg text-slate-700 mb-6">
                             Congratulations! You've successfully completed the game by moving all cards to the foundation piles!
                         </p>
-                        <button
-                            onClick={() => setShowWinModal(false)}
-                            className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
-                        >
-                            Close
-                        </button>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => {
+                                    resetGame();
+                                    setShowWinModal(false);
+                                }}
+                                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                            >
+                                New Game
+                            </button>
+                            <button
+                                onClick={() => setShowWinModal(false)}
+                                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                            >
+                                Close
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

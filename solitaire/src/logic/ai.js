@@ -239,28 +239,28 @@ export function explainMove(move, state) {
   switch (move.type) {
     case 'tableau-to-foundation': {
       const card = tableaus?.[move.fromColumn]?.[move.fromIndex];
-      return `Move ${describeCard(card)} from column ${move.fromColumn + 1} to foundation pile (building Ace to King by suit).`;
+      return `Move ${describeCard(card)} (purple highlight) from column ${move.fromColumn + 1} to foundation pile (amber highlight) - building Ace to King by suit.`;
     }
     case 'waste-to-foundation': {
       const card = waste?.[waste.length - 1];
-      return `Move ${describeCard(card)} from waste pile to foundation (building Ace to King by suit).`;
+      return `Move ${describeCard(card)} (purple highlight) from waste pile to foundation (amber highlight) - building Ace to King by suit.`;
     }
     case 'tableau-to-tableau': {
       const card = tableaus?.[move.fromColumn]?.[tableaus[move.fromColumn].length - 1];
-      return `Move ${describeCard(card)} from column ${move.fromColumn + 1} to column ${move.toColumn + 1} (alternate red/black, descending).`;
+      return `Move ${describeCard(card)} (purple highlight) from column ${move.fromColumn + 1} to column ${move.toColumn + 1} (green highlight) - alternate red/black, descending.`;
     }
     case 'tableau-stack-to-tableau': {
       const startCard = tableaus?.[move.fromColumn]?.[move.fromIndex];
-      return `Move ${move.length}-card stack (starting with ${describeCard(startCard)}) from column ${move.fromColumn + 1} to column ${move.toColumn + 1} (alternate colors).`;
+      return `Move ${move.length}-card stack (purple highlight, starting with ${describeCard(startCard)}) from column ${move.fromColumn + 1} to column ${move.toColumn + 1} (green highlight) - alternate colors.`;
     }
     case 'waste-to-tableau': {
       const card = waste?.[waste.length - 1];
-      return `Move ${describeCard(card)} from waste to column ${move.toColumn + 1} (alternate red/black, descending).`;
+      return `Move ${describeCard(card)} (purple highlight) from waste to column ${move.toColumn + 1} (green highlight) - alternate red/black, descending.`;
     }
     case 'draw-stock':
-      return `Click the stock pile to draw a new card.`;
+      return `Click the stock pile (green highlight) to draw a new card.`;
     case 'recycle-waste':
-      return `Click the stock pile to recycle waste cards back to stock.`;
+      return `Click the stock pile (green highlight) to recycle waste cards back to stock.`;
     case 'game-won':
       return `Congratulations! All cards are in the foundation piles!`;
     case 'no-move':
