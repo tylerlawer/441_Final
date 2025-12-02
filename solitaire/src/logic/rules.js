@@ -1,15 +1,14 @@
 /**
  * SOLITAIRE GAME RULES (Centralized)
- *
- * All static rule data lives in rules.json. This module consumes that
- * configuration and exposes functional helpers. To change variants
- * (e.g. allow any card on empty tableau, draw 3 from stock, etc.)
- * edit rules.json only – no code changes required if shape preserved.
+ * Config-driven: tweakable values (draw count, rank values, suits, pile rules) are in rules.json.
+ * Helper functions read that config; logic is kept thin and data-driven.
+ * If something seems hard-coded, check rules.json before changing code.
  */
 
 import rulesConfigRaw from './rules.json';
 
 // Defensive clone of JSON (avoid accidental mutation of import object)
+// I once accidentally mutated an imported JSON and nothing updated, so cloning keeps things safe.
 const RULES = JSON.parse(JSON.stringify(rulesConfigRaw));
 
 // --- Utility lookups derived from JSON config ---
@@ -17,6 +16,7 @@ const rankValues = RULES.rankValues;
 const rankAliases = RULES.rankAliases;
 const suitColors = RULES.suitColors;
 
+// Convert rank to numeric value using config (supports aliases like 'A','K').
 const rankToNumber = (r) => {
     if (r == null) return NaN;
     if (typeof r === 'number') return r;
@@ -27,6 +27,7 @@ const rankToNumber = (r) => {
     return Number.isNaN(n) ? NaN : n;
 };
 
+// Return 'red' or 'black' based on suit from config.
 const colorOf = (suit) => {
     if (!suit) return null;
     const key = String(suit).toLowerCase();
@@ -34,6 +35,7 @@ const colorOf = (suit) => {
 };
 
 // TABLEAU RULES
+// Rule: can we drop a (top) card / stack onto a tableau column?
 export function canPlaceOnTableau(card, destinationCards) {
     if (!card) return false;
     const cfg = RULES.tableau;
@@ -71,6 +73,7 @@ export function canPlaceOnTableau(card, destinationCards) {
 }
 
 // FOUNDATION RULES
+// Rule: can we put this card on a foundation pile?
 export function canPlaceOnFoundation(card, foundationCards) {
     if (!card) return false;
     const cfg = RULES.foundation;
@@ -96,6 +99,7 @@ export function canPlaceOnFoundation(card, foundationCards) {
 }
 
 // GENERAL PLACEMENT RULE
+// Generic placement wrapper that decides which rule set applies
 export function canPlace(card, destinationCards) {
     if (!card) return false;
 
@@ -109,11 +113,14 @@ export function canPlace(card, destinationCards) {
 }
 
 // DRAGGING RULES
+// Simple drag permission: only face-up cards can start a drag
 export function canDragCard(card) {
     if (!card) return false;
     return card.faceUp === true;
 }
 
+// Validate dragging a stack starting at cardIndex from a tableau column
+// Ensures alternating colors + descending order + all face-up
 export function canDragFromTableau(tableau, columnIndex, cardIndex) {
     if (!tableau || !tableau[columnIndex]) return false;
     const column = tableau[columnIndex];
@@ -141,6 +148,7 @@ export function canDragFromWaste(waste) {
 }
 
 // MOVE TO FOUNDATION RULES
+// Try each foundation; return index of first legal spot or -1
 export function canMoveToFoundation(card, foundations) {
     if (!card || !card.faceUp) return false;
     
@@ -153,6 +161,7 @@ export function canMoveToFoundation(card, foundations) {
     return -1;
 }
 
+// Convenience: check top card of a given tableau column
 export function canMoveTableauToFoundation(tableau, columnIndex, foundations) {
     if (!tableau || !tableau[columnIndex]) return false;
     const column = tableau[columnIndex];
@@ -162,6 +171,7 @@ export function canMoveTableauToFoundation(tableau, columnIndex, foundations) {
     return canMoveToFoundation(topCard, foundations);
 }
 
+// Convenience: check top waste card
 export function canMoveWasteToFoundation(waste, foundations) {
     if (!waste || waste.length === 0) return false;
     const topCard = waste[waste.length - 1];
@@ -169,16 +179,19 @@ export function canMoveWasteToFoundation(waste, foundations) {
 }
 
 // STOCK RULES
+// Draw allowed if we have at least drawCount cards left
 export function canDrawFromStock(stock) {
     const drawCount = RULES.stock.drawCount || 1;
     return stock && stock.length >= drawCount;
 }
 
+// Recycle when stock empty but waste has cards
 export function canRecycleWaste(stock, waste) {
     return (!stock || stock.length === 0) && waste && waste.length > 0;
 }
 
 // WINNING CONDITION
+// Win condition: every foundation has full length from config
 export function isGameWon(foundations) {
     const pilesNeeded = RULES.winCondition.foundationPiles;
     const cardsPer = RULES.winCondition.cardsPerPile;
@@ -190,6 +203,7 @@ export function isGameWon(foundations) {
 }
 
 // CARD UPDATE HELPER
+// Update in-flight card indices after a move (used by DnD logic)
 export function onMoveCard(item, toColIndex) {
     if (!item || !item.card) return null;
     const card = item.card;
@@ -210,6 +224,7 @@ export function onMoveCard(item, toColIndex) {
 }
 
 // Expose raw config (read‑only) for UI / debugging
+// Export a read-only copy for UI display / debugging panels
 export function getRulesConfig() {
     return RULES;
 }

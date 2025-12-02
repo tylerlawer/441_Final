@@ -1,3 +1,4 @@
+// Main game state hook/provider. Components call useGame() for shared state.
 import React, { createContext, useContext, useState } from 'react';
 import { initGame } from '../logic/setup.js';
 import { 
@@ -7,12 +8,14 @@ import {
     canRecycleWaste,
     isGameWon 
 } from '../logic/rules.js';
+import getSuggestion from '../logic/ai.js';
 
-const GameContext = createContext(null);
+const GameContext = createContext(null); // single context for all game bits
 
 export function GameProvider({ children }) {
     const [gameState, setGameState] = useState(() => initGame());
     const { tableaus, foundations, stock, waste } = gameState;
+    const [currentSuggestion, setCurrentSuggestion] = useState(null);
 
     const setTableaus = (updater) => {
         setGameState((prev) => ({
@@ -43,10 +46,14 @@ export function GameProvider({ children }) {
     };
 
     const resetGame = () => {
+        // Re-shuffle and rebuild everything
         setGameState(initGame());
+        setCurrentSuggestion(null); // clear any old hint
     };
 
     function moveCards(fromColumn, fromIndex, toColumn) {
+        // Clear any existing suggestion highlight after a move attempt
+        setCurrentSuggestion(null);
         if (fromColumn === toColumn) return;
         setTableaus((prev) => {
             const newTableaus = prev.map((col) => [...col]);
@@ -78,7 +85,10 @@ export function GameProvider({ children }) {
         });
     }
 
+    // Draw a card from stock OR recycle waste if stock empty
     function drawOne() {
+        // Clear suggestion highlight when user draws or recycles
+        setCurrentSuggestion(null);
         setStock((prevStock) => {
             // Try to recycle waste if stock is empty
             if (canRecycleWaste(prevStock, waste)) {
@@ -102,7 +112,9 @@ export function GameProvider({ children }) {
         });
     }
 
+    // Move waste top card onto a tableau if legal
     function moveWasteToTableau(toColumn) {
+        setCurrentSuggestion(null);
         if (!waste || waste.length === 0) return;
         const top = waste[waste.length - 1];
 
@@ -121,7 +133,9 @@ export function GameProvider({ children }) {
         });
     }
 
+    // Move top tableau card to a foundation pile
     function moveToFoundation(fromColumn, fromIndex, foundationIndex) {
+        setCurrentSuggestion(null);
         setTableaus((prevTableaus) => {
             const newTableaus = prevTableaus.map((col) => [...col]);
             const source = newTableaus[fromColumn];
@@ -152,7 +166,9 @@ export function GameProvider({ children }) {
         });
     }
 
+    // Move waste top card to a foundation pile
     function moveWasteToFoundation(foundationIndex) {
+        setCurrentSuggestion(null);
         if (!waste || waste.length === 0) return;
         const top = waste[waste.length - 1];
 
@@ -166,39 +182,45 @@ export function GameProvider({ children }) {
         });
     }
 
-    function autoMoveToFoundation() {
-        // Try to auto-move cards from tableau to foundation
-        for (let col = 0; col < tableaus.length; col++) {
-            const column = tableaus[col];
-            if (column.length === 0) continue;
-            const topCard = column[column.length - 1];
-            if (!topCard.faceUp) continue;
-
-            for (let f = 0; f < 4; f++) {
-                if (canPlaceOnFoundation(topCard, foundations[f])) {
-                    moveToFoundation(col, column.length - 1, f);
-                    return true;
-                }
-            }
+    // Apply the currently suggested move programmatically
+    function applySuggestedMove() {
+        const m = currentSuggestion;
+        if (!m) return false;
+        switch (m.type) {
+            case 'tableau-to-foundation':
+                moveToFoundation(m.fromColumn, m.fromIndex, m.foundationIndex);
+                break;
+            case 'waste-to-foundation':
+                moveWasteToFoundation(m.foundationIndex);
+                break;
+            case 'tableau-to-tableau':
+            case 'tableau-stack-to-tableau':
+                moveCards(m.fromColumn, m.fromIndex, m.toColumn);
+                break;
+            case 'waste-to-tableau':
+                moveWasteToTableau(m.toColumn);
+                break;
+            case 'draw-stock':
+            case 'recycle-waste':
+                drawOne();
+                break;
+            default:
+                return false;
         }
-
-        // Try to auto-move from waste to foundation
-        if (waste && waste.length > 0) {
-            const topWaste = waste[waste.length - 1];
-            for (let f = 0; f < 4; f++) {
-                if (canPlaceOnFoundation(topWaste, foundations[f])) {
-                    moveWasteToFoundation(f);
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        setCurrentSuggestion(null);
+        return true;
     }
 
-    const checkWin = () => {
-        return isGameWon(foundations);
+    const checkWin = () => isGameWon(foundations); // tiny wrapper for clarity
+
+    const suggestMove = () => {
+        // Ask AI helper for best move then store for UI highlight
+        const result = getSuggestion({ tableaus, foundations, stock, waste });
+        setCurrentSuggestion(result.move);
+        return result;
     };
+
+    const clearSuggestion = () => setCurrentSuggestion(null); // manual clear button
 
     return (
         <GameContext.Provider value={{ 
@@ -211,9 +233,12 @@ export function GameProvider({ children }) {
             moveWasteToTableau,
             moveToFoundation,
             moveWasteToFoundation,
-            autoMoveToFoundation,
+            applySuggestedMove,
             resetGame,
-            checkWin
+            checkWin,
+            suggestMove,
+            clearSuggestion,
+            currentSuggestion
         }}>
             {children}
         </GameContext.Provider>
