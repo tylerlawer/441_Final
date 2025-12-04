@@ -1,6 +1,11 @@
 # Klondike Solitaire with AI
 
+[![CI](https://img.shields.io/github/actions/workflow/status/robertbiv/Klondike-Solitaire-with-AI/ci.yml?branch=main&label=CI)](https://github.com/robertbiv/Klondike-Solitaire-with-AI/actions/workflows/ci.yml)
+[![Pages](https://img.shields.io/github/deployments/robertbiv/Klondike-Solitaire-with-AI/github-pages?label=pages)](https://github.com/robertbiv/Klondike-Solitaire-with-AI/deployments/activity_log?environment=github-pages)
+
 A Solitaire game that can actually teach you how to play better! Built with React and includes an AI that explains its thinking.
+
+**🎮 [Play it live here!](https://robertb.me/Klondike-Solitaire-with-AI/)**
 
 ## What's Cool About This
 
@@ -57,6 +62,24 @@ npm run build
 ```
 
 This creates an optimized version in the `build/` folder that you can deploy anywhere.
+
+## GitHub Actions (CI/CD)
+
+This repo includes GitHub Actions for CI and deployment:
+
+- **CI** (`.github/workflows/ci.yml`): Installs dependencies, runs tests, and builds on push/PR to `main`.
+- **Deploy to Pages** (`.github/workflows/deploy.yml`): Builds and publishes the app to GitHub Pages on push to `main`.
+
+### Enable GitHub Pages
+
+1. In GitHub, go to `Settings` → `Pages`.
+2. Set **Source** to "GitHub Actions".
+3. After the next push to `main`, the site will deploy. The URL will appear in the Actions run summary.
+
+Notes:
+- Workflows build from the `solitaire/` folder and publish the `solitaire/build` output.
+- Tests run via `react-scripts test` with `--watchAll=false --passWithNoTests` for CI.
+- The project currently has no test files; CI passes with the `--passWithNoTests` flag.
 
 ## How It's Organized
 

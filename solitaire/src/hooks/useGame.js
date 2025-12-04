@@ -43,21 +43,7 @@ export function GameProvider({ children }) {
         }));
     };
 
-    // foundations updates are now handled via unified setGameState in moveToFoundation/moveWasteToFoundation
-
-    const setStock = (updater) => {
-        setGameState((prev) => ({
-            ...prev,
-            stock: typeof updater === 'function' ? updater(prev.stock) : updater
-        }));
-    };
-
-    const setWaste = (updater) => {
-        setGameState((prev) => ({
-            ...prev,
-            waste: typeof updater === 'function' ? updater(prev.waste) : updater
-        }));
-    };
+    // foundations/stock/waste updates are handled via unified setGameState in action functions
 
     /**
      * Start a completely new game.
@@ -124,29 +110,23 @@ export function GameProvider({ children }) {
         const { silent = false } = opts;
         // Clear suggestion highlight when user draws or recycles
         setCurrentSuggestion(null);
-        setStock((prevStock) => {
-            // Try to recycle waste if stock is empty
-            if (canRecycleWaste(prevStock, waste)) {
-                if (!silent) debugLog('♻️ Recycling waste back to stock');
-                setWaste((prevWaste) => {
-                    if (!prevWaste || prevWaste.length === 0) return [];
-                    const newStock = prevWaste.map((c) => ({ ...c, faceUp: false }));
-                    setStock(newStock);
-                    return [];
-                });
-                return [];
-            }
+            setGameState((prev) => {
+                // Recycle waste back to stock
+                if (canRecycleWaste(prev.stock, prev.waste)) {
+                    if (!silent) debugLog('♻️ Recycling waste back to stock');
+                    const newStock = prev.waste.map((c) => ({ ...c, faceUp: false }));
+                    return { ...prev, stock: newStock, waste: [] };
+                }
 
-            // Draw from stock if available
-            if (!canDrawFromStock(prevStock)) return prevStock;
-
-            const newStock = prevStock.slice(0, -1);
-            const drawn = prevStock[prevStock.length - 1];
-            if (!silent) debugLog(`🎴 Drew card from stock`, { card: `${drawn.rank} of ${drawn.suit}` });
-            const toWaste = { ...drawn, faceUp: true };
-            setWaste((prev) => [...prev, toWaste]);
-            return newStock;
-        });
+                // Draw from stock
+                if (!canDrawFromStock(prev.stock)) return prev;
+                const newStock = prev.stock.slice(0, -1);
+                const drawn = prev.stock[prev.stock.length - 1];
+                if (!silent) debugLog('🎴 Drew card from stock', { card: `${drawn.rank} of ${drawn.suit}` });
+                const toWaste = { ...drawn, faceUp: true };
+                const newWaste = [...prev.waste, toWaste];
+                return { ...prev, stock: newStock, waste: newWaste };
+            });
     }
 
     // Move waste top card onto a tableau if legal
@@ -163,16 +143,16 @@ export function GameProvider({ children }) {
             debugLog(`📥 Move waste card to column ${toColumn + 1}`, { card: `${top.rank} of ${top.suit}` });
         }
 
-        setWaste((prevWaste) => prevWaste.slice(0, -1));
-
-        setTableaus((prev) => {
-            const newTableaus = prev.map((col) => [...col]);
-            const destCol = newTableaus[toColumn] || [];
-            const cardToMove = { ...top, columnIndex: toColumn, faceUp: true };
-            newTableaus[toColumn] = destCol.concat(cardToMove);
-            newTableaus[toColumn].forEach((c, i) => { c.index = i; });
-            return newTableaus;
-        });
+            setGameState((prev) => {
+                if (!prev.waste || prev.waste.length === 0) return prev;
+                const wasteCopy = prev.waste.slice(0, -1);
+                const tableausCopy = prev.tableaus.map((col) => [...col]);
+                const cardToMove = { ...top, columnIndex: toColumn, faceUp: true };
+                const destCol = tableausCopy[toColumn] || [];
+                tableausCopy[toColumn] = destCol.concat(cardToMove);
+                tableausCopy[toColumn].forEach((c, i) => { c.index = i; });
+                return { ...prev, waste: wasteCopy, tableaus: tableausCopy };
+            });
     }
 
     // Move top tableau card to a foundation pile
